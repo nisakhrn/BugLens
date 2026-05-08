@@ -22,7 +22,6 @@ app.add_middleware(
 
 # Inisialisasi kebutuhan model klasifikasi
 classifier = InsectClassifier(
-    metadata_path="",
     model_path=""
 )
 
