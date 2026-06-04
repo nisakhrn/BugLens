@@ -5,11 +5,16 @@ from gemini_service import GeminiExpert
 import os
 from dotenv import load_dotenv
 
-# Memuat environment variable dari file .env
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Memuat environment variable dari backend/.env lalu fallback ke root/.env
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"), override=False)
+
+MODEL_PATH = os.path.join(BASE_DIR, "artifacts", "model_torchscript.pt")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Inisialisasi aplikasi FastAPI
-app = FastAPI(title="")
+app = FastAPI(title="BugLens Backend")
 
 # Konfigurasi CORS agar frontend dapat mengakses API
 app.add_middleware(
@@ -22,33 +27,48 @@ app.add_middleware(
 
 # Inisialisasi kebutuhan model klasifikasi
 classifier = InsectClassifier(
-    model_path=""
+    model_path=MODEL_PATH
 )
 
 # Inisialisasi layanan Gemini AI
-gemini_expert = # dapatkan API Key
+gemini_expert = GeminiExpert(GEMINI_API_KEY) if GEMINI_API_KEY else None
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.post("/analyze")
 async def analyze_image(file: UploadFile = File(...)):
 
     # Validasi apakah file yang diunggah berupa gambar
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File harus berupa gambar")
     
     try:
         
         # Membaca file gambar
-        image_bytes = 
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="File gambar kosong")
 
         # Prediksi jenis serangga menggunakan model ML
-        predictions = 
+        predictions = classifier.predict(image_bytes, top_k=3)
+        if not predictions:
+            raise HTTPException(status_code=500, detail="Model tidak mengembalikan prediksi")
         
         # Mengambil hasil prediksi terbaik
-        top_prediction = 
+        top_prediction = predictions[0]["class"]
         
         # Mengambil informasi detail dari Gemini AI
         try:
-            ai_insight = gemini_expert.get_insect_info(top_prediction)
+            if gemini_expert is None:
+                ai_insight = (
+                    f"Model lokal mengidentifikasi serangga ini sebagai {top_prediction}. "
+                    "Tambahkan GEMINI_API_KEY pada file .env untuk mendapatkan insight detail dari Gemini AI."
+                )
+            else:
+                ai_insight = gemini_expert.get_insect_info(top_prediction)
         except Exception as gemini_error:
             print(f"Peringatan Gemini API: {gemini_error}")
             # Contoh template pesan ketika Gemini gagal memberikan response
